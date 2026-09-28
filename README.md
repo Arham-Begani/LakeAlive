@@ -88,3 +88,33 @@ Swimming and boating are fictional game activities, not an indication that any r
 
 The tour is self-paced. Ninety seconds is a presentation script, not an enforced timer. Assisted walks can be interrupted with WASD; reselect the task from the journal to resume.
 
+## How the illustrative simulation works
+
+The model is an additive teaching device. Scores, timing, and magnitudes are deliberately designed, not calibrated to lake measurements. Procedural scenery uses a fixed pseudorandom seed. No action results depend on timing or random outcomes, and all six action orders have the same final result.
+
+| State or action | Clarity (out of 100) | Habitat (out of 100) | Wildlife index (out of 10) |
+| --- | ---: | ---: | ---: |
+| Starting state | 32 | 24 | 2 |
+| Collect shoreline litter | +18 | +8 | +1 |
+| Plant native seeds | +8 | +30 | +3 |
+| Clear inlet litter | +22 | +12 | +2 |
+| All three completed | 80 | 74 | 8 |
+
+Wildlife is an illustrative index, not an animal census. Restoration reveals additional fish and birds; ambient marsh birds and butterflies exist independently of that index. The native-seed action represents locally appropriate wetland vegetation, without claiming botanical identification. Growth from seeds to mature reeds in seconds is an explicit time-compression device. Water appearance tracks completed actions; it is an artistic cue, not a water-quality measurement. Animated positions depend on elapsed time, while the scene layout, action outcomes, and final scores are deterministic.
+
+Real restoration depends on wastewater treatment, hydrology, catchment conditions, species selection, monitoring, and long-term maintenance. Wildlife return is neither immediate nor guaranteed. The simulation compresses time and omits these complex processes. It is not a recommendation to plant or release organisms in a real lake.
+
+## Learning goal and references
+
+The classroom goal is to connect catchment inputs, shoreline habitat, and wildlife, then ask what the simplified model leaves out. This project is not affiliated with the institutions cited below.
+
+References verified on 27 September 2026:
+
+- Ramachandra T. V. et al. (2016), *Devarabisanahalli Lake: Path towards Ecological Restoration*, ENVIS Technical Report 104, Energy & Wetlands Research Group, Centre for Ecological Sciences, IISc. [Executive summary](https://wgbis.ces.iisc.ac.in/energy/water/paper/ETR104/summary.html). Discusses urban lake pressures, native vegetation, and educational monitoring.
+- The same report's [restoration recommendations](https://wgbis.ces.iisc.ac.in/biodiversity/pubs/ETR/ETR104/recommendation.html) discuss integrated wastewater treatment and wetlands, location-specific macrophytes, and shoreline vegetation as habitat. These support the broad learning themes, **not** this application's numerical effects. The report is historical and site-specific, not a current universal restoration prescription.
+
+## Accessibility, performance, and limitations
+
+- Semantic buttons, native modal focus handling, visible keyboard focus, labeled controls, touch targets, and screen-reader action announcements.
+- Text and indicators remain HTML over the WebGL scene. The visual 3D world itself does not have a complete nonvisual equivalent.
+- Reduced motion freezes decorative animation and skips the particle burst and growth transition; intentional walking and camera controls remain available.
