@@ -253,3 +253,78 @@ dialog.addEventListener('click', event => { if (event.target === dialog) { const
 const how = () => showPanel('Connections, not predictions.', `
   <p>This is an <strong>illustrative simulation</strong> of a fictional, Bengaluru-inspired lake. No scores are measured lake data. Sitting, swimming, boating, nursery care, and birdwatching are game activities, not evidence of real-world ecological or water-safety outcomes. The scene compresses ecological change into seconds to make connections visible.</p>
   <div class="note-box">The same choices always give the same results. Actions can be taken once each, in any order. There is no timer and no wrong first step.</div>
+  <h3>Our simple rules</h3>
+  <table><caption>Designed score changes, not scientific estimates</caption><thead><tr><th>Action</th><th>Clarity</th><th>Habitat</th><th>Wildlife</th></tr></thead><tbody><tr><td>Starting state</td><td>32</td><td>24</td><td>2</td></tr>${actions.map(a => `<tr><td>${a.title}</td><td>+${a.effect.clarity}</td><td>+${a.effect.habitat}</td><td>+${a.effect.wildlife}</td></tr>`).join('')}</tbody></table>
+  <p>Clarity and habitat are invented scores out of 100. The wildlife index is a designed score out of 10, not a count of animals on screen. Ambient marsh birds and butterflies are present independently of restoration. New reeds represent locally appropriate wetland vegetation; the artwork does not identify a particular species.</p>
+  <p>In real lakes, outcomes depend on wastewater treatment, catchment conditions, seasons, species selection, and long-term stewardship. Removing litter alone does not treat sewage. Work with local experts before intervening in a real lake.</p>
+  <a class="source-link" href="https://wgbis.ces.iisc.ac.in/biodiversity/pubs/ETR/ETR104/recommendation.html" target="_blank" rel="noreferrer">Read IISc’s lake restoration recommendations ↗</a>
+`);
+$('how').onclick = how; $('footer-how').onclick = how;
+$('about').onclick = () => showPanel('Small world. Bigger questions.', `
+  <p>LakeAlive is an interactive environmental learning project for a student hackathon. It invites you to notice the connections between a lake’s water, its shoreline habitat, and the wildlife it can support.</p>
+  <h3>Learn by caring</h3><p>Walk around a fictional Bengaluru-inspired lake, try three restoration actions, and observe the changes. Use it to start a classroom conversation: What enters a lake? Who lives at its edges? What can a community care for together?</p>
+  <div class="note-box">An educational illustration, not a scientific forecast. No real-world impact, users, affiliations, or partnerships are claimed.</div>
+  <p>Every tree, ripple, rock, and reed is generated with code. The core experience runs in your browser without an account, API key, or downloaded scenery.</p>
+`);
+$('help').onclick = () => showPanel('Make yourself at home.', `
+  <dl class="controls-list"><div><dt><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></dt><dd>Walk relative to the camera (arrow keys also work)</dd></div><div><dt><kbd>Shift</kbd></dt><dd>Hold to run</dd></div><div><dt>Drag / scroll</dt><dd>Look around / adjust camera distance</dd></div><div><dt><kbd>Q</kbd> / <kbd>R</kbd></dt><dd>Turn the camera with the keyboard</dd></div><div><dt><kbd>E</kbd></dt><dd>Interact, talk, stand up, or return to shore</dd></div><div><dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></dt><dd>Walk to cleanup, seed bed, or inlet</dd></div><div><dt><kbd>C</kbd> / <kbd>M</kbd></dt><dd>Toggle sneaking / open the park map</dd></div><div><dt><kbd>J</kbd> / <kbd>H</kbd></dt><dd>Toggle field journal / lake health</dd></div><div><dt>Tap the ground</dt><dd>Walk there; WASD takes over</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Close a panel or guided tour</dd></div></dl><p>Walk up to a place or neighbour, then press E or tap its prompt. Swim with WASD; in a boat, W/S rows and A/D steers. Press E to return to shore; moor the boat at its jetty. Sneak near the bird hide and let startled birds settle before observing. On a phone, use the arrow pad, Sneak button, and drag to look.</p><button id="help-tour" class="primary">Start guided tour</button>
+`);
+dialog.addEventListener('click', event => { if ((event.target as HTMLElement).id === 'help-tour') { dialog.close(); startTour(); } });
+const tourSteps = [
+  { title: 'You are part of this world.', copy: 'You are the explorer in the sun hat. Use WASD to walk and drag to look around. Next starts a short guided walk; you can take over at any time.', action: null },
+  { title: '01. A cleaner shoreline.', copy: 'Follow the guided walk to the community shore. When the prompt appears, press E or tap Collect shoreline litter. Your explorer will gather it up.', action: 'cleanup' },
+  { title: '02. Plant a little possibility.', copy: 'Walk with us to the seed bed. Press E or tap Plant native seeds when nearby. Watch your explorer plant, then see the reeds grow. Time is compressed for this illustration.', action: 'reeds' },
+  { title: '03. Care for what flows in.', copy: 'Our last walk leads to the inlet. Press E to clear its litter. In a real lake, wastewater also needs treatment; a cleanup alone cannot do that.', action: 'drain' },
+  { title: 'Stay a little longer.', copy: 'The lake is a little more alive. Wander, watch the birds, or open Lake health to explore the illustrative scores. Reset gives you a fresh beginning.', action: null },
+];
+function renderTour() {
+  const step = tourSteps[tourStep]; $('tour-label').textContent = `THE 90-SECOND TOUR · ${tourStep + 1} / 5`;
+  $('tour-title').textContent = step.title; $('tour-copy').textContent = step.copy;
+  const waiting = step.action && !completed.includes(step.action as ActionId);
+  $<HTMLButtonElement>('tour-next').disabled = !!waiting;
+  $('tour-next').innerHTML = waiting ? 'Interact when nearby' : tourStep === 4 ? 'Keep exploring ' + icon('check') : 'Next ' + icon('arrow-right'); refreshIcons();
+  if (step.action && waiting) world?.visit(step.action as ActionId);
+}
+function startTour() { enter(); tourStep = 0; $('tour').hidden = false; renderTour(); }
+$('intro-tour').onclick = startTour;
+$('tour-next').onclick = () => { if (tourStep === 4) { tourStep = -1; $('tour').hidden = true; } else { tourStep++; renderTour(); } };
+$('tour-close').onclick = () => { tourStep = -1; $('tour').hidden = true; };
+function updateMotion() { const reduced = world?.reduced ?? reducedQuery.matches; $('motion').setAttribute('aria-pressed', String(reduced)); $('motion').setAttribute('aria-label', reduced ? 'Enable ambient motion' : 'Reduce motion'); document.documentElement.classList.toggle('reduced-motion', reduced); }
+$('motion').onclick = () => { if (world) world.reduced = !world.reduced; updateMotion(); };
+reducedQuery.addEventListener('change', event => { if (world) world.reduced = event.matches; updateMotion(); });
+$('sound').onclick = async () => {
+  try {
+    if (!audio) {
+      audio = new AudioContext(); gain = audio.createGain(); gain.gain.value = 0; gain.connect(audio.destination);
+      const random = seededRandom(42);
+      const buffer = audio.createBuffer(1, audio.sampleRate * 4, audio.sampleRate); const data = buffer.getChannelData(0); let value = 0;
+      for (let i = 0; i < data.length; i++) { value = (value + (random() * 2 - 1) * 0.02) / 1.02; data[i] = value * 3; }
+      const noise = audio.createBufferSource(); noise.buffer = buffer; noise.loop = true;
+      const filter = audio.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 700; noise.connect(filter); filter.connect(gain); noise.start();
+      for (const frequency of [392, 523.25]) { const tone = audio.createOscillator(); tone.frequency.value = frequency; const volume = audio.createGain(); volume.gain.value = 0.015; tone.connect(volume); volume.connect(gain); tone.start(); }
+    }
+    await audio.resume(); muted = !muted; gain!.gain.setTargetAtTime(muted ? 0 : 0.35, audio.currentTime, 0.3);
+    $('sound').innerHTML = icon(muted ? 'volume-x' : 'volume-2'); $('sound').setAttribute('aria-pressed', String(!muted)); $('sound').setAttribute('aria-label', muted ? 'Enable ambient sound' : 'Mute ambient sound'); refreshIcons();
+  } catch { announce('Ambient audio is unavailable in this browser. You can keep exploring the lake.'); }
+};
+document.addEventListener('visibilitychange', () => { world?.keys.clear(); if (audio && gain) gain.gain.setTargetAtTime(document.hidden || muted ? 0 : 0.35, audio.currentTime, 0.1); });
+window.addEventListener('blur', () => world?.keys.clear());
+window.addEventListener('keydown', event => {
+  if (event.key === 'Escape') { $('tour').hidden = true; tourStep = -1; }
+  if (!started || dialog.open || event.ctrlKey || event.metaKey || event.altKey) return;
+  const target = event.target as HTMLElement;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+  const key = event.key.toLowerCase();
+  if (['w', 'a', 's', 'd', 'q', 'r', 'shift', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) { event.preventDefault(); world?.keys.add(key); }
+  if (key === 'e' && !event.repeat) interactNearby();
+  if (key === 'c' && !event.repeat) world?.toggleSneak();
+  if (key === 'm' && !event.repeat) showMap();
+  if (key === 'h' && !event.repeat) $('health-toggle').click();
+  if (key === 'j' && !event.repeat) $('journal-toggle').click();
+  if (['1', '2', '3'].includes(key) && !event.repeat) selectDestination(actions[Number(key) - 1].id);
+});
+window.addEventListener('keyup', event => world?.keys.delete(event.key.toLowerCase()));
+document.querySelectorAll<HTMLButtonElement>('[data-key]').forEach(button => {
+  button.addEventListener('pointerdown', event => { event.preventDefault(); button.setPointerCapture(event.pointerId); world?.keys.add(button.dataset.key!); });
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(type, () => world?.keys.delete(button.dataset.key!));
+});
