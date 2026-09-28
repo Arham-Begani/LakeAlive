@@ -83,3 +83,88 @@ const reducedQuery = matchMedia('(prefers-reduced-motion: reduce)');
 function errorState() { $('loading').hidden = true; $('world-error').hidden = false; $<HTMLButtonElement>('start').disabled = true; $<HTMLButtonElement>('intro-tour').disabled = true; if (world) { world.paused = true; world.keys.clear(); } }
 async function initialize() {
   try {
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    world = new LakeWorld($('world'), errorState);
+    world.onNotice = announce;
+    world.onFrame = () => {
+      if (!started) return;
+      for (const action of actions) {
+        const p = world!.project(locations[action.id]); const marker = $('marker-' + action.id);
+        marker.hidden = !p.visible || completed.includes(action.id);
+        marker.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`;
+      }
+      updateGameHUD();
+    };
+    await world.ready;
+    $('loading').hidden = true; $<HTMLButtonElement>('start').disabled = false; $<HTMLButtonElement>('intro-tour').disabled = false;
+    updateMotion();
+  } catch (error) { console.error('Lake renderer failed:', error); errorState(); }
+}
+void initialize();
+$('reload').onclick = () => location.reload();
+
+function enter() {
+  if (!world) return; started = true; world.playing = true; $('experience').classList.add('is-playing'); document.body.classList.add('in-game');
+  $('intro').hidden = true;
+  for (const id of ['actions', 'markers', 'touch-pad', 'game-hud']) $(id).hidden = false;
+  if (innerWidth <= 760) { $('actions').hidden = true; $('journal-toggle').setAttribute('aria-expanded', 'false'); }
+  requestAnimationFrame(() => world?.resize());
+  world.renderer.domElement.focus({ preventScroll: true });
+}
+$('start').onclick = enter;
+function announce(message: string) { clearTimeout(toastTimer); $('toast').textContent = message; $('toast').hidden = false; toastTimer = setTimeout(() => { $('toast').hidden = true; }, 6500); }
+function renderHealth() {
+  const health = healthFor(completed);
+  for (const key of ['clarity', 'habitat'] as const) { $(key + '-value').innerHTML = `${health[key]}<span>/100</span>`; $<HTMLMeterElement>(key + '-meter').value = health[key]; $(key + '-meter').textContent = `${health[key]} of 100`; }
+  $('wildlife-value').innerHTML = `${health.wildlife} <span>/10</span>`;
+  $('action-count').textContent = `${completed.length} / 3`;
+  $('mini-count').textContent = `${completed.length} / 3`;
+  $('mini-health').textContent = `Clarity ${health.clarity} · Habitat ${health.habitat} · Wildlife ${health.wildlife}`;
+  document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => {
+    const done = completed.includes(button.dataset.action as ActionId); button.disabled = done; button.classList.toggle('complete', done);
+    button.querySelector('.action-key')!.innerHTML = done ? icon('check') : String(actions.findIndex(a => a.id === button.dataset.action) + 1);
+    button.querySelector('small')!.textContent = done ? 'A little care, given.' : actions.find(a => a.id === button.dataset.action)!.description;
+  });
+  actions.forEach(a => { $('marker-' + a.id).classList.toggle('complete', completed.includes(a.id)); });
+  refreshIcons();
+}
+function takeAction(id: ActionId) {
+  if (!world || !started || completed.includes(id) || dialog.open) return;
+  if (world.distanceTo(id) > 2.1) { world.visit(id); announce('Walking to the site. Use WASD to take over, then press E when nearby.'); return; }
+  world.startAction(id, () => {
+    completed.push(id); world!.apply(completed, id); renderHealth();
+    announce(actions.find(a => a.id === id)!.response + (completed.length === 3 ? ' All three places cared for. Keep wandering, or reset for a fresh start.' : ''));
+    if (tourStep >= 1 && tourStep <= 3) renderTour();
+  });
+}
+function contextPrompt() {
+  if (!world) return null;
+  if (world.working) {
+    const item = actions.find(a => a.id === world!.working) ?? activities.find(a => a.id === world!.working)!;
+    const labels: Record<string, string> = { cleanup: 'Collecting litter...', reeds: 'Planting seeds...', drain: 'Clearing the inlet...', nursery: 'Watering seedlings...', sapling: 'Planting a shade tree...', watch: 'Watching quietly...' };
+    return { id: world.working, title: labels[world.working], location: item.location, detail: 'A little care in progress' };
+  }
+  if (world.mode === 'sitting') return { id: 'stand', title: 'Stand up', location: 'A moment in the grove', detail: 'Press E or move when you are ready' };
+  if (world.mode === 'boating') return { id: 'boat-return', title: canLeaveBoat(world.playerPosition) ? 'Moor and step ashore' : 'Return to the jetty', location: 'Out on the water', detail: 'W/S row, A/D steer. E returns you to shore.' };
+  if (world.mode === 'swimming') return { id: 'swim-return', title: 'Swim back to shore', location: 'The swimming cove', detail: 'WASD to swim. E guides you back.' };
+  if (world.nearbyNpc) { const npc = npcs.find(n => n.id === world!.nearbyNpc)!; return { id: `npc-${npc.id}`, title: `Talk to ${npc.name}`, location: npc.role, detail: 'Press E to say hello' }; }
+  if (world.nearbyActivity) {
+    const activity = activityById(world.nearbyActivity);
+    const detail = activity.id === 'watch' ? world.mode !== 'sneaking' ? 'Press C to sneak, then E to observe' : world.park.startled ? 'Stay quiet while the birds settle' : 'The birds are settled. E to observe.' : 'Press E or tap to begin';
+    return { id: activity.id, title: activity.title, location: activity.location, detail };
+  }
+  if (world.nearby) { const action = actions.find(a => a.id === world!.nearby)!; return { id: action.id, title: action.title, location: action.location, detail: 'Press E or tap to help' }; }
+  return null;
+}
+function updateGameHUD() {
+  if (!world) return;
+  const prompt = contextPrompt();
+  const state = `${prompt?.id}|${prompt?.detail}|${world.working}|${world.navigating}|${completed.length}|${world.mode}|${[...world.activityCompleted].join(',')}`;
+  if (state !== hudState) {
+    hudState = state; $('interaction').hidden = !prompt; $('interaction').dataset.nearby = prompt?.id ?? '';
+    if (prompt) { $('interaction-location').textContent = prompt.location; $('interaction-title').textContent = prompt.title; $('interaction-detail').textContent = prompt.detail; $('location-name').textContent = prompt.location; }
+    else $('location-name').textContent = 'A whole park to discover';
+    $<HTMLButtonElement>('interact').disabled = !!world.working;
+    $('work-progress').hidden = !world.working;
+    $('navigation-status').hidden = !world.navigating;
+    if (world.navigating) {
