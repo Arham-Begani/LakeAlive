@@ -118,3 +118,31 @@ References verified on 27 September 2026:
 - Semantic buttons, native modal focus handling, visible keyboard focus, labeled controls, touch targets, and screen-reader action announcements.
 - Text and indicators remain HTML over the WebGL scene. The visual 3D world itself does not have a complete nonvisual equivalent.
 - Reduced motion freezes decorative animation and skips the particle burst and growth transition; intentional walking and camera controls remain available.
+- Procedural ambient sound is opt-in, with no audio downloads. Audio mutes while the tab is hidden.
+- Pixel ratio is capped at 1.5; cached static shadows, merged static geometry, low-poly meshes, and a single 1024px shadow-casting light limit rendering cost. CPU-only WebGL automatically uses 0.75 pixel ratio and a 30 FPS ceiling. Hidden tabs stop rendering, and modal panels reduce rendering frequency. Hardware performance still varies; the browser tests use software WebGL and are not a laptop FPS benchmark.
+- Loading and renderer-error states include a reload option. A WebGL-capable browser is required; there is no 2D fallback.
+- The responsive game HUD fits the phone viewport. The journal and health panel can be opened individually; the touch pad and nearby interaction button remain available. No data is sent or saved.
+
+## Files
+
+- `src/world.ts`: procedural world, animated character, perspective follow camera, collision, assisted navigation, and nearby interactions.
+- `src/park.ts`: procedural activity areas, canoe, NPCs, birds, butterflies, and activity animations.
+- `src/activities.ts`: activity and NPC definitions, dialogue, boat mooring rules, and map constants.
+- `src/movement.ts`: pure camera-relative movement and traversable-boundary rules.
+- `src/simulation.ts`: seeded randomness and pure deterministic score model.
+- `src/main.ts`: interface, guided tour, keyboard/touch input, panels, and audio.
+- `src/style.css`: design tokens and responsive interface.
+- `tests/`: model and browser integration coverage.
+
+Design direction: Apple-inspired restrained controls, warm light surfaces, a moss-green accent, and editorial serif display type. All scenery is generated locally; Lucide provides interface icons.
+
+## Validation performed
+
+- `npm run typecheck` — passed.
+- `npm run lint` — passed.
+- `npm test` — 8 score, reproducibility, movement, boat-boundary, and camera-obstruction tests passed.
+- `npm run build` — passed without bundle-size warnings; output in `dist/`.
+- `npx playwright test` — five browser scenarios covering third-person desktop playthrough, mobile guided walks, WebGL failure, park activities, and NPC conversations. Includes proximity-gated actions, reset, panel dismissal, sound toggling, keyboard and touch movement, and reduced motion.
+- Desktop and 390px mobile screenshots reviewed; local development server returned HTTP 200.
+
+Browser checks use Chromium software rendering. They verify functionality and layout, not scientific validity or hardware frame-rate guarantees.
