@@ -88,3 +88,48 @@ export class ParkLife {
     this.box(4.2, 0.1, 2.8, 0xb5bc80, 27, 2.8, 10.7).rotation.x = 0.08;
     this.sapling.position.set(25, 0, -12); this.sapling.scale.setScalar(0.05);
     const trunk = this.mesh(new THREE.CylinderGeometry(0.08, 0.12, 1.9, 5), 0x8d704d, this.sapling); trunk.position.y = 0.95;
+    for (let i = 0; i < 3; i++) { const leaf = this.mesh(new THREE.IcosahedronGeometry(0.6, 0), [0x6d9258, 0x8da464, 0x759b5c][i], this.sapling); leaf.position.set((i - 1) * 0.28, 1.5 + i * 0.2, 0); }
+    const soil = this.mesh(new THREE.CylinderGeometry(0.7, 0.8, 0.08, 10), 0x8f7851); soil.position.set(25, 0.03, -12);
+  }
+  private makeBoat() {
+    this.boat.position.set(boatMooring.x, 0.18, boatMooring.z);
+    const outline = [[0, 1.9], [0.6, 1.1], [0.7, -1.1], [0, -1.9], [-0.7, -1.1], [-0.6, 1.1]];
+    const vertices: number[] = [], indices: number[] = [];
+    outline.forEach(([x, z]) => { vertices.push(x, 0.42, z, x * 0.7, -0.04, z * 0.87); });
+    for (let i = 0; i < 6; i++) { const a = i * 2, b = ((i + 1) % 6) * 2; indices.push(a, b, a + 1, b, b + 1, a + 1); }
+    const hullGeo = new THREE.BufferGeometry(); hullGeo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); hullGeo.setIndex(indices); hullGeo.computeVertexNormals();
+    const hull = this.mesh(hullGeo, 0xb67f46, this.boat); (hull.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+    this.box(1.05, 0.09, 2.5, 0xab7946, 0, 0, 0, this.boat);
+    for (const z of [-0.6, 0.7]) this.box(1.25, 0.1, 0.36, 0xd0a369, 0, 0.3, z, this.boat);
+    for (const side of [-1, 1]) {
+      const oar = new THREE.Group(); oar.position.set(side * 0.66, 0.42, 0.25); this.boat.add(oar); this.oars.push(oar);
+      const shaft = this.mesh(new THREE.CylinderGeometry(0.025, 0.03, 1.8, 6), 0xe0b77b, oar); shaft.rotation.z = Math.PI / 2; shaft.position.x = side * 0.6;
+      this.box(0.5, 0.06, 0.2, 0xa97741, side * 1.4, 0, 0, oar);
+    }
+    for (let i = 0; i < 5; i++) {
+      const wake = new THREE.Mesh(new THREE.RingGeometry(0.65, 0.68, 28), new THREE.MeshBasicMaterial({ color: 0xf0e8c5, transparent: true, opacity: 0.3, depthWrite: false }));
+      wake.rotation.x = -Math.PI / 2; this.root.add(wake); this.wakes.push(wake);
+    }
+  }
+  private makeWildlife() {
+    for (let i = 0; i < 3; i++) {
+      const bird = new THREE.Group(); this.root.add(bird); this.birds.push(bird);
+      const body = this.mesh(new THREE.SphereGeometry(0.18, 8, 6), 0xf4ebcc, bird); body.scale.set(0.7, 0.8, 1.5); body.position.y = 0.3;
+      const neck = this.mesh(new THREE.CylinderGeometry(0.045, 0.07, 0.4, 5), 0xe9e0bd, bird); neck.position.set(0, 0.57, 0.15);
+      const head = this.mesh(new THREE.SphereGeometry(0.09, 6, 5), 0xf4ebcc, bird); head.position.set(0, 0.8, 0.15);
+      const beak = this.mesh(new THREE.ConeGeometry(0.035, 0.2, 4), 0xb49c51, bird); beak.rotation.x = Math.PI / 2; beak.position.set(0, 0.78, 0.29);
+      for (const side of [-1, 1]) { const wing = this.box(0.32, 0.035, 0.3, 0xd9dcc4, side * 0.15, 0.38, 0, bird); wing.name = `wing-${side}`; }
+    }
+    for (let i = 0; i < 9; i++) {
+      const butterfly = new THREE.Group(); this.root.add(butterfly); this.butterflies.push(butterfly);
+      for (const side of [-1, 1]) { const wing = this.mesh(new THREE.CircleGeometry(0.09, 5), i % 2 ? 0xe8bb67 : 0xe0d6a7, butterfly); wing.rotation.x = -Math.PI / 2; wing.position.x = side * 0.07; (wing.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide; }
+    }
+  }
+  private makeProps() {
+    for (const x of [-0.09, 0.09]) { const lens = this.mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.18, 8), 0x41574b, this.binoculars); lens.rotation.x = Math.PI / 2; lens.position.x = x; }
+    const can = this.mesh(new THREE.CylinderGeometry(0.14, 0.13, 0.25, 8), 0x86a092, this.wateringCan); can.position.y = -0.04;
+    const spout = this.mesh(new THREE.CylinderGeometry(0.025, 0.045, 0.35, 6), 0x86a092, this.wateringCan); spout.rotation.x = 0.85; spout.position.set(0, 0, 0.2);
+    for (let i = 0; i < 12; i++) { const drop = this.mesh(new THREE.SphereGeometry(0.018, 4, 3), 0xc4e0cf, this.wateringCan); this.waterDrops.push(drop); }
+  }
+  npcPosition(id: NpcId) { return this.npcActors.find(npc => npc.id === id)!.group.position; }
+  reset() { this.alertRemaining = 0; this.startled = false; this.sapling.scale.setScalar(0.05); this.boat.position.set(boatMooring.x, 0.18, boatMooring.z); this.boat.rotation.set(0, 0, 0); }
