@@ -298,3 +298,103 @@ export class LakeWorld {
     const crown = this.mesh(new THREE.CylinderGeometry(0.22, 0.25, 0.17, 10), 0xd8b879, this.torso); crown.position.y = 1.1;
     const band = this.mesh(new THREE.CylinderGeometry(0.251, 0.254, 0.055, 10), 0x6e7449, this.torso); band.position.y = 1.04;
     const pack = this.mesh(new THREE.BoxGeometry(0.33, 0.4, 0.2), 0x476859, this.torso); pack.position.set(0, 0.28, -0.24);
+    const pocket = this.mesh(new THREE.BoxGeometry(0.25, 0.17, 0.06), 0x6c8465, this.torso); pocket.position.set(0, 0.18, -0.37);
+    for (const x of [-0.15, 0.15]) {
+      const strap = this.mesh(new THREE.BoxGeometry(0.05, 0.48, 0.035), 0x5a674c, this.torso); strap.position.set(x, 0.28, 0.175);
+      const leg = new THREE.Group(); leg.name = `limb-${this.limbs.length}`; leg.position.set(x * 0.8, 0.7, 0); this.avatar.add(leg); this.limbs.push(leg);
+      const trouser = this.mesh(new THREE.CylinderGeometry(0.105, 0.09, 0.29, 6), 0x45594e, leg); trouser.position.y = -0.145;
+      const knee = new THREE.Group(); knee.position.y = -0.29; leg.add(knee); this.knees.push(knee);
+      const shin = this.mesh(new THREE.CylinderGeometry(0.09, 0.075, 0.26, 6), 0x45594e, knee); shin.position.y = -0.13;
+      const boot = this.mesh(new THREE.BoxGeometry(0.19, 0.15, 0.3), 0x614f38, knee); boot.position.set(0, -0.32, 0.045);
+    }
+    for (const side of [-1, 1]) {
+      const arm = new THREE.Group(); arm.name = `limb-${this.limbs.length}`; arm.position.set(side * 0.29, 0.46, 0); this.torso.add(arm); this.limbs.push(arm);
+      const sleeve = this.mesh(new THREE.CylinderGeometry(0.095, 0.085, 0.25, 6), 0xd39343, arm); sleeve.position.y = -0.13;
+      const forearm = this.mesh(new THREE.CylinderGeometry(0.065, 0.07, 0.26, 6), 0xb98057, arm); forearm.position.y = -0.36;
+      const hand = this.mesh(new THREE.SphereGeometry(0.075, 6, 5), 0xc38e63, arm); hand.position.y = -0.5;
+    }
+    this.limbs[3].add(this.tool); this.tool.position.set(0, -0.5, 0.12);
+    const handle = this.mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.35, 6), 0x906744, this.tool); handle.rotation.x = Math.PI / 2;
+    const blade = this.mesh(new THREE.ConeGeometry(0.09, 0.2, 4), 0xafb6a2, this.tool); blade.rotation.x = Math.PI / 2; blade.position.z = 0.25;
+    this.tool.visible = false;
+    this.avatar.position.copy(this.player);
+  }
+  private makeLandscape() {
+    this.scene.add(this.landscape);
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(160, 24, 16), new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite: false,
+      uniforms: { topColor: { value: new THREE.Color(0xa8c6c4) }, horizonColor: { value: new THREE.Color(0xf0d6aa) } },
+      vertexShader: 'varying vec3 vPosition; void main() { vPosition = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform vec3 topColor; uniform vec3 horizonColor; varying vec3 vPosition; void main() { float blend = smoothstep(-0.08, 0.7, normalize(vPosition).y); gl_FragColor = vec4(mix(horizonColor, topColor, blend), 1.0);\n #include <tonemapping_fragment>\n #include <colorspace_fragment>\n }',
+    })); this.landscape.add(sky);
+    const meadow = this.mesh(new THREE.CircleGeometry(130, 96), 0x8c9b71, this.landscape); meadow.rotation.x = -Math.PI / 2; meadow.position.y = -0.04;
+    const random = seededRandom(781);
+    for (let i = 0; i < 58; i++) {
+      const a = random() * Math.PI * 2, r = 76 + random() * 30;
+      const mound = this.mesh(new THREE.IcosahedronGeometry(3 + random() * 7, 1), i % 2 ? 0x889b73 : 0x9ca681, this.landscape);
+      mound.position.set(Math.cos(a) * r, -1.6, Math.sin(a) * r); mound.scale.y = 0.4 + random() * 0.25;
+      if (i < 32) {
+        const tree = new THREE.Group(); tree.position.set(Math.cos(a) * (32 + r * 0.3), 0, Math.sin(a) * (32 + r * 0.3)); this.landscape.add(tree);
+        const trunk = this.mesh(new THREE.CylinderGeometry(0.12, 0.2, 3, 5), 0x79684e, tree); trunk.position.y = 1.5;
+        const top = this.mesh(new THREE.IcosahedronGeometry(1.7, 1), i % 2 ? 0x637e5f : 0x7a8f62, tree); top.position.y = 3.4; top.scale.y = 1.3;
+      }
+    }
+    // Distant urban silhouettes keep the setting a city lake, not wilderness.
+    for (let i = 0; i < 20; i++) {
+      const height = 2 + random() * 6;
+      const building = this.mesh(new THREE.BoxGeometry(1.5 + random() * 2, height, 2), 0xa9aa96, this.landscape);
+      building.position.set(-45 + i * 4.5, height / 2 - 0.1, -70 - random() * 10);
+    }
+    const sun = new THREE.Mesh(new THREE.SphereGeometry(4, 20, 12), new THREE.MeshBasicMaterial({ color: 0xffe6aa, fog: false })); sun.position.set(-48, 24, -68); this.landscape.add(sun);
+    for (let i = 0; i < 12; i++) {
+      const cloud = new THREE.Mesh(new THREE.IcosahedronGeometry(3, 1), new THREE.MeshBasicMaterial({ color: 0xf8e5c6 })); cloud.position.set(-50 + random() * 100, 22 + random() * 10, -65 + random() * 25); cloud.scale.set(2.5, 0.22, 0.6); this.landscape.add(cloud);
+    }
+    // A seed bed and collection sack make the interaction sites tangible.
+    const bed = this.mesh(new THREE.CylinderGeometry(0.65, 0.7, 0.08, 10), 0x8f7553); bed.position.set(7.8 * MAP_SCALE, 0.3, 2.8 * MAP_SCALE);
+    for (let i = 0; i < 3; i++) { const packet = this.mesh(new THREE.BoxGeometry(0.15, 0.2, 0.04), 0xd9cf91); packet.position.set(7.8 * MAP_SCALE + i * 0.18, 0.44, 3.4 * MAP_SCALE); packet.rotation.x = -0.2; }
+    const sack = this.mesh(new THREE.IcosahedronGeometry(0.35, 1), 0x5d7867); sack.position.set(-6.6 * MAP_SCALE, 0.56, 5.8 * MAP_SCALE); sack.scale.y = 1.3;
+    this.landscape.visible = false;
+  }
+  private makeParticles(count: number, color: number, size: number) {
+    const positions = Array.from({ length: count * 3 }, (_, i) => i % 3 === 1 ? this.random() * 5 + 0.5 : (this.random() - 0.5) * 22);
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    const points = new THREE.Points(geo, new THREE.PointsMaterial({ color, size, transparent: true, opacity: 0.7 })); this.scene.add(points); return points;
+  }
+  private batchScenery() {
+    // Merge stationary geometry by color: hundreds of blades and tree crowns
+    // become a few draw calls, while interactive groups remain independent.
+    this.scene.updateMatrixWorld(true);
+    const dynamicRoots = new Set<THREE.Object3D>([this.avatar, this.park.root, this.landscape, this.reeds, this.litter, this.inletLitter, ...this.fish, ...this.birds, ...this.trees.map(tree => tree.group)]);
+    const batch = (root: THREE.Object3D, skipDynamic: boolean) => {
+      const buckets = new Map<string, { material: THREE.MeshStandardMaterial; meshes: THREE.Mesh[]; geometry: THREE.BufferGeometry[] }>();
+      const inverse = root.matrixWorld.clone().invert();
+      root.traverse(object => {
+        if (!(object instanceof THREE.Mesh) || !(object.material instanceof THREE.MeshStandardMaterial) || object.material.vertexColors) return;
+        if (skipDynamic) { let parent: THREE.Object3D | null = object; while (parent && parent !== root) { if (dynamicRoots.has(parent)) return; parent = parent.parent; } }
+        const key = object.material.color.getHexString();
+        if (!buckets.has(key)) buckets.set(key, { material: object.material, meshes: [], geometry: [] });
+        const bucket = buckets.get(key)!;
+        const geometry = object.geometry.index ? object.geometry.toNonIndexed() : object.geometry.clone();
+        geometry.applyMatrix4(inverse.clone().multiply(object.matrixWorld));
+        bucket.geometry.push(geometry); bucket.meshes.push(object);
+      });
+      for (const bucket of buckets.values()) {
+        const geometry = mergeGeometries(bucket.geometry); if (!geometry) continue;
+        for (const mesh of bucket.meshes) mesh.removeFromParent();
+        for (const part of bucket.geometry) part.dispose();
+        const merged = new THREE.Mesh(geometry, bucket.material); merged.castShadow = true; merged.receiveShadow = true; root.add(merged);
+      }
+    };
+    batch(this.scene, true);
+    for (const root of [this.reeds, this.litter, this.inletLitter, this.landscape, this.park.static]) batch(root, false);
+    for (const { group } of this.trees) this.forest.attach(group);
+    batch(this.forest, false);
+  }
+  private bindControls() {
+    const canvas = this.renderer.domElement;
+    canvas.addEventListener('pointerdown', e => { this.drag = { x: e.clientX, y: e.clientY, moved: false }; canvas.setPointerCapture(e.pointerId); });
+    canvas.addEventListener('pointermove', e => {
+      if (!this.drag || this.paused) return;
+      const delta = e.clientX - this.drag.x;
+      const dy = e.clientY - this.drag.y;
+      if (Math.abs(delta) + Math.abs(dy) > 3 || this.drag.moved) {
