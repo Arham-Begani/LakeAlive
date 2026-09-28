@@ -168,3 +168,88 @@ function updateGameHUD() {
     $('work-progress').hidden = !world.working;
     $('navigation-status').hidden = !world.navigating;
     if (world.navigating) {
+      const place = actions.find(a => a.id === world!.navigating)?.location ?? activities.find(a => a.id === world!.navigating)?.location ?? npcs.find(n => n.id === world!.navigating)?.name ?? 'the shore';
+      $('navigation-status').textContent = `On the way to ${place} · WASD to take over`;
+    }
+    $('walk-hint').hidden = !!prompt || !!world.navigating;
+    $('mode-label').textContent = modeLabels[world.mode];
+    $('sneak-toggle').setAttribute('aria-pressed', String(world.mode === 'sneaking'));
+    $<HTMLButtonElement>('sneak-toggle').disabled = !!world.working || !['walking', 'sneaking'].includes(world.mode);
+    $<HTMLButtonElement>('run-toggle').disabled = world.mode !== 'walking' || !!world.working;
+    $('explore-count').textContent = `${world.activityCompleted.size}/6`;
+    document.querySelectorAll<HTMLButtonElement>('[data-activity]').forEach(button => {
+      const id = button.dataset.activity as ActivityId, done = world!.activityCompleted.has(id);
+      button.classList.toggle('visited', done); button.disabled = done && activityById(id).once;
+      button.querySelector('.activity-check')!.textContent = done ? '✓' : '';
+    });
+  }
+  $('run-toggle').setAttribute('aria-pressed', String(world.keys.has('shift')));
+  $<HTMLProgressElement>('work-progress').value = world.workProgress;
+}
+function interactNearby() {
+  if (!world || dialog.open || world.working) return;
+  if (['sitting', 'boating', 'swimming'].includes(world.mode)) { world.returnToShore(); return; }
+  if (world.nearbyNpc) { showNpc(world.nearbyNpc); return; }
+  if (world.nearbyActivity) { world.interactActivity(world.nearbyActivity); return; }
+  if (world.nearby) takeAction(world.nearby);
+}
+function closeJournalOnPhone() { if (innerWidth <= 760) { $('actions').hidden = true; $('journal-toggle').setAttribute('aria-expanded', 'false'); } }
+function selectDestination(id: ActionId) {
+  if (world?.working) return;
+  world?.visit(id);
+  if (innerWidth <= 760) { $('actions').hidden = true; $('journal-toggle').setAttribute('aria-expanded', 'false'); }
+}
+document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => { button.onclick = () => selectDestination(button.dataset.action as ActionId); });
+$('interact').onclick = interactNearby;
+$('journal-toggle').onclick = () => { if (innerWidth <= 760) { $('health').hidden = true; $('health-toggle').setAttribute('aria-expanded', 'false'); } $('actions').hidden = !$('actions').hidden; $('journal-toggle').setAttribute('aria-expanded', String(!$('actions').hidden)); };
+$('health-toggle').onclick = () => { if (innerWidth <= 760) { $('actions').hidden = true; $('journal-toggle').setAttribute('aria-expanded', 'false'); } $('health').hidden = !$('health').hidden; $('health-toggle').setAttribute('aria-expanded', String(!$('health').hidden)); };
+document.querySelectorAll<HTMLButtonElement>('[data-visit]').forEach(button => { button.onclick = () => {
+  selectDestination(button.dataset.visit as ActionId);
+}; });
+function reset() {
+  completed = []; world?.reset(); hudState = ''; renderHealth(); tourStep = -1; $('tour').hidden = true; announce('A fresh beginning. The lake is ready for your care.');
+}
+$('reset').onclick = reset;
+function showPanel(title: string, body: string) {
+  dialog.classList.remove('dialog-wide'); $('dialog-content').innerHTML = `<h2>${title}</h2>${body}`; if (!dialog.open) dialog.showModal(); if (world) { world.paused = true; world.keys.clear(); } refreshIcons();
+}
+
+function showNpc(id: NpcId, line = 0) {
+  const npc = npcs.find(n => n.id === id)!;
+  showPanel(npc.name, `<div class="npc-identity"><span class="npc-avatar">${npc.name[0]}</span><div><strong>${npc.role}</strong><small>A neighbour in this fictional park</small></div></div><p class="npc-speech">${npc.lines[line]}</p><div class="dialog-choices"><button class="primary" data-npc-next="${id}" data-line="${(line + 1) % npc.lines.length}">${line === 0 ? 'Tell me more' : 'What else should I know?'} ${icon('arrow-right')}</button><button class="secondary" data-map-kind="activity" data-map-id="${npc.destination}">Show me ${activityById(npc.destination).location.toLowerCase()}</button><button class="secondary" data-goodbye>See you around</button></div>`);
+}
+function showMap() {
+  if (!world) return;
+  const project = (x: number, z: number) => `${300 + x * 5.5},${200 + z * 5.5}`;
+  const outline = Array.from({ length: 97 }, (_, i) => { const angle = i / 96 * Math.PI * 2; const radius = shoreRadius(angle); return `${i ? 'L' : 'M'}${project(Math.cos(angle) * radius, Math.sin(angle) * radius * 0.66)}`; }).join(' ') + 'Z';
+  const player = world.playerPosition;
+  const mapRows = (kind: string, items: { id: string; title: string; description: string }[]) => items.map(item => `<button data-map-kind="${kind}" data-map-id="${item.id}"><span><strong>${item.title}</strong><small>${item.description}</small></span>${icon('arrow-right')}</button>`).join('');
+  showPanel('Find your own little adventure.', `<p class="map-intro">Choose a place for an assisted walk. WASD takes over whenever you like.</p><div class="park-map"><svg viewBox="0 0 600 400" role="img" aria-label="Park map. The lake is central, with a picnic grove to the west, nursery to the east, bird hide to the north, and jetty to the south."><rect width="600" height="400" rx="12" fill="#e3e7ce"/><ellipse cx="300" cy="200" rx="250" ry="164" fill="#d2dcb8"/><ellipse cx="300" cy="200" rx="153" ry="111" fill="none" stroke="#b9ab7f" stroke-width="7"/><path d="${outline}" fill="#8cb2a0" stroke="#f1d99d" stroke-width="6"/>${activities.map((a, i) => `<g transform="translate(${project(a.point.x, a.point.z)})"><circle r="12" fill="#365c46" stroke="#fff9e1" stroke-width="2"/><text y="4" text-anchor="middle" fill="#fff9e1" font-size="11" font-family="sans-serif">${i + 1}</text></g>`).join('')}${npcs.map(n => `<g transform="translate(${project(n.point.x, n.point.z)})"><circle r="5" fill="#bf8c52" stroke="#fff9e1" stroke-width="2"/></g>`).join('')}<g transform="translate(${project(player.x, player.z)})"><circle r="9" fill="#fff" stroke="#294833" stroke-width="3"/><circle r="3" fill="#294833"/></g><text x="24" y="32" fill="#476443" font-size="12" font-family="sans-serif">N ↑</text><text x="24" y="378" fill="#476443" font-size="11" font-family="sans-serif">White dot: you · Gold dots: neighbours</text></svg></div><div class="map-destinations"><section><h3>Explore the park</h3>${mapRows('activity', activities.map((a, i) => ({ id: a.id, title: `${i + 1}. ${a.title}`, description: a.location })))}</section><section><h3>Meet the neighbours</h3>${mapRows('npc', npcs.map(n => ({ id: n.id, title: n.name, description: n.role })))}<h3>Care for the lake</h3>${mapRows('care', actions.map(a => ({ id: a.id, title: a.title, description: a.location })))}</section></div>`);
+  dialog.classList.add('dialog-wide');
+}
+$('map-toggle').onclick = showMap;
+$('sneak-toggle').onclick = () => world?.toggleSneak();
+$('run-toggle').onclick = () => { if (!world) return; if (world.keys.has('shift')) world.keys.delete('shift'); else world.keys.add('shift'); };
+document.querySelectorAll<HTMLButtonElement>('[data-journal-tab]').forEach(button => { button.onclick = () => {
+  const explore = button.dataset.journalTab === 'explore'; $('care-tasks').hidden = explore; $('explore-tasks').hidden = !explore;
+  document.querySelectorAll('[data-journal-tab]').forEach(tab => tab.setAttribute('aria-pressed', String(tab === button)));
+}; });
+document.querySelectorAll<HTMLButtonElement>('[data-activity]').forEach(button => { button.onclick = () => { world?.visitActivity(button.dataset.activity as ActivityId); closeJournalOnPhone(); }; });
+dialog.addEventListener('click', event => {
+  const target = event.target as Element;
+  const destination = target.closest<HTMLElement>('[data-map-kind]');
+  if (destination) {
+    dialog.close();
+    const id = destination.dataset.mapId!, kind = destination.dataset.mapKind;
+    if (kind === 'activity') world?.visitActivity(id as ActivityId); else if (kind === 'npc') world?.visitNpc(id as NpcId); else selectDestination(id as ActionId);
+    closeJournalOnPhone();
+  }
+  const next = target.closest<HTMLElement>('[data-npc-next]'); if (next) showNpc(next.dataset.npcNext as NpcId, Number(next.dataset.line));
+  if (target.closest('[data-goodbye]')) dialog.close();
+});
+dialog.addEventListener('close', () => { if (world) world.paused = false; });
+$('dialog-close').onclick = () => dialog.close();
+dialog.addEventListener('click', event => { if (event.target === dialog) { const rect = dialog.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close(); } });
+const how = () => showPanel('Connections, not predictions.', `
+  <p>This is an <strong>illustrative simulation</strong> of a fictional, Bengaluru-inspired lake. No scores are measured lake data. Sitting, swimming, boating, nursery care, and birdwatching are game activities, not evidence of real-world ecological or water-safety outcomes. The scene compresses ecological change into seconds to make connections visible.</p>
+  <div class="note-box">The same choices always give the same results. Actions can be taken once each, in any order. There is no timer and no wrong first step.</div>
