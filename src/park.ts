@@ -133,3 +133,35 @@ export class ParkLife {
   }
   npcPosition(id: NpcId) { return this.npcActors.find(npc => npc.id === id)!.group.position; }
   reset() { this.alertRemaining = 0; this.startled = false; this.sapling.scale.setScalar(0.05); this.boat.position.set(boatMooring.x, 0.18, boatMooring.z); this.boat.rotation.set(0, 0, 0); }
+  animate(time: number, delta: number, player: THREE.Vector3, mode: PlayerMode, reduced: boolean, completed: Set<string>, boatMoving: boolean) {
+    const t = reduced ? 0 : time;
+    this.npcActors.forEach((npc, i) => {
+      if (npc.id === 'ravi') { npc.group.position.set(npc.home.x + Math.cos(t * 0.15) * 2.4, 0.3, npc.home.z + Math.sin(t * 0.15) * 2.4); npc.group.rotation.y = -t * 0.15; }
+      const near = npc.group.position.distanceTo(player) < 4;
+      if (near) npc.group.rotation.y = Math.atan2(player.x - npc.group.position.x, player.z - npc.group.position.z);
+      npc.limbs.forEach((limb, j) => { limb.rotation.x = npc.id === 'ravi' && !near ? Math.sin(t * 3) * 0.35 * (j % 2 ? -1 : 1) : Math.sin(t + i) * 0.035; });
+      if (near && !reduced) npc.limbs[3].rotation.z = -0.55 + Math.sin(t * 2) * 0.2; else npc.limbs[3].rotation.z = 0;
+    });
+    const quiet = mode === 'sneaking' || mode === 'watching' || mode === 'sitting';
+    if (Math.hypot(player.x - 1, player.z + 15.3) < 5 && !quiet) this.alertRemaining = 4;
+    else this.alertRemaining = Math.max(0, this.alertRemaining - delta);
+    this.startled = this.alertRemaining > 0;
+    this.birds.forEach((bird, i) => {
+      const y = this.startled ? 2 + Math.sin(t * 2 + i) * 0.15 : 0.2;
+      bird.position.set(-0.2 + i * 0.9 + (this.startled ? Math.sin(t + i) * 1.3 : 0), y, -14.7 + (this.startled ? Math.cos(t + i) * 1.3 : 0));
+      bird.rotation.y = this.startled ? -t : Math.sin(t * 0.3 + i) * 0.4;
+      for (const side of [-1, 1]) bird.getObjectByName(`wing-${side}`)!.rotation.z = this.startled ? side * Math.sin(t * 10) * 0.8 : side * 0.25;
+    });
+    this.butterflies.forEach((b, i) => { b.position.set(26.5 + Math.sin(t * 0.5 + i) * 2, 0.7 + Math.sin(t + i) * 0.2, 10 + Math.cos(t * 0.7 + i) * 2); b.children.forEach((wing, j) => { wing.rotation.y = Math.sin(t * 14 + i) * 0.7 * (j ? -1 : 1); }); });
+    this.petals.forEach(p => { p.visible = completed.has('nursery'); });
+    this.sapling.scale.lerp(new THREE.Vector3().setScalar(completed.has('sapling') ? 1 : 0.05), reduced ? 1 : 1 - Math.exp(-delta * 2));
+    this.boat.position.y = 0.18 + Math.sin(t * 1.4) * 0.035; this.boat.rotation.z = Math.sin(t * 1.1) * 0.02;
+    this.oars.forEach((oar, i) => { oar.rotation.y = boatMoving ? Math.sin(t * 3.7) * 0.5 : 0.15; oar.rotation.z = (i ? 1 : -1) * (boatMoving ? Math.cos(t * 3.7) * 0.16 : 0.1); });
+    this.wakes.forEach((wake, i) => {
+      wake.visible = mode === 'swimming' || mode === 'boating'; const a = (t * 0.8 + i / 5) % 1;
+      wake.position.set(player.x, 0.14, player.z); wake.scale.setScalar(0.4 + a * (mode === 'boating' ? 2.2 : 1.4));
+      (wake.material as THREE.MeshBasicMaterial).opacity = reduced ? 0.15 : (1 - a) * 0.24;
+    });
+    this.waterDrops.forEach((drop, i) => { const a = (t * 2 + i / 12) % 1; drop.position.set(Math.sin(i * 3) * 0.07, -0.05 - a * 0.6, 0.3 + a * 0.2); });
+  }
+}
