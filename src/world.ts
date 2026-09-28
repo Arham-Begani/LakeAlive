@@ -598,3 +598,52 @@ export class LakeWorld {
     if (aim.distanceTo(desired) * obstruction < 2.8) {
       let bestScore = aim.distanceTo(desired) * obstruction, bestYaw = this.cameraYaw;
       for (const offset of [0.35, -0.35, 0.7, -0.7, 1.1, -1.1, 1.5, -1.5]) {
+        const yaw = this.cameraYaw + offset;
+        const alternative = new THREE.Vector3(this.player.x + Math.sin(yaw) * distance, desired.y, this.player.z + Math.cos(yaw) * distance);
+        const fraction = cameraBoomFraction(aim, alternative, this.cameraObstacles);
+        const score = aim.distanceTo(alternative) * fraction - Math.abs(offset) * 0.4;
+        if (score > bestScore) { bestScore = score; bestYaw = yaw; desired.copy(alternative); obstruction = fraction; }
+        if (bestScore > 4) break;
+      }
+      this.cameraYaw = bestYaw;
+    }
+    desired.sub(aim).multiplyScalar(obstruction).add(aim);
+    const blend = !this.cameraReady || this.reduced || obstruction < 1 ? 1 : 1 - Math.exp(-delta * 7);
+    this.followCamera.position.lerp(desired, blend); this.aim.copy(aim);
+    // Recheck the interpolated boom so smoothing can never cross solid scenery.
+    const safe = cameraBoomFraction(this.aim, this.followCamera.position, this.cameraObstacles);
+    this.followCamera.position.sub(this.aim).multiplyScalar(safe).add(this.aim);
+    this.followCamera.lookAt(this.aim); this.cameraReady = true;
+    this.renderer.domElement.dataset.cameraBoom = this.followCamera.position.distanceTo(this.aim).toFixed(2);
+  }
+  private tick(timestamp: number) {
+    this.frame = requestAnimationFrame(t => this.tick(t));
+    if (document.hidden) { this.last = timestamp; return; }
+    // Avoid saturating CPU-only WebGL; movement still uses elapsed time.
+    if (!this.firstFrame && timestamp - this.last < (this.paused ? 100 : this.softwareRendering ? 1000 / 30 : 0)) return;
+    const delta = document.hidden ? 0 : Math.min((timestamp - (this.last || timestamp)) / 1000, 0.5); this.last = timestamp;
+    if (!this.reduced && !this.paused && !document.hidden) this.time += delta;
+    if (this.playing && !this.paused) this.gameTime += delta;
+    const t = this.time;
+    if (this.playing && !this.paused) {
+      // Substeps keep collision stable without tying walking/work speed to FPS.
+      const steps = Math.max(1, Math.ceil(delta / 0.033));
+      for (let i = 0; i < steps; i++) this.movePlayer(delta / steps);
+    }
+    this.waterMaterial.color.lerp(this.waterTarget, this.reduced ? 1 : 0.035);
+    this.reeds.scale.y = THREE.MathUtils.lerp(this.reeds.scale.y, this.completed.includes('reeds') ? 1 : 0.03, this.reduced ? 1 : 0.035);
+    this.windUniform.value = this.reduced ? 0 : t;
+    this.park.animate(this.gameTime, this.paused ? 0 : delta, this.player, this.mode, this.reduced, this.activityCompleted, this.boatMoving);
+    this.torso.getObjectByName('life-jacket')!.visible = this.mode === 'boating';
+    this.ripples.forEach((r, i) => { r.scale.x = 1 + Math.sin(t + i) * 0.4; (r.material as THREE.MeshBasicMaterial).opacity = 0.13 + (Math.sin(t * 0.7 + i) + 1) * 0.09; });
+    const wildlife = healthFor(this.completed).wildlife;
+    this.fish.forEach((f, i) => { f.visible = i < Math.ceil(wildlife / 2); const a = t * 0.12 + i * 2.4; f.position.set(Math.cos(a) * (3 + i * 0.35) * MAP_SCALE, 0.16, Math.sin(a) * (2 + i * 0.2) * MAP_SCALE); f.rotation.y = -a - Math.PI / 2; f.children[1].rotation.y = Math.sin(t * 5 + i) * 0.25; });
+    this.birds.forEach((b, i) => { b.visible = i < Math.floor(wildlife / 2); const a = t * 0.14 + i * 1.8; b.position.set(Math.cos(a) * (6 + i * 0.3) * MAP_SCALE, 3 + Math.sin(t * 0.5 + i) * 0.2 + i * 0.3, Math.sin(a) * 4 * MAP_SCALE); b.rotation.y = -a - Math.PI / 2; b.children[1].rotation.x = -Math.PI / 2 + Math.sin(t * 6 + i) * 0.4; b.children[2].rotation.x = Math.PI / 2 - Math.sin(t * 6 + i) * 0.4; });
+    this.particles.rotation.y = t * 0.012; this.particles.position.y = Math.sin(t * 0.25) * 0.2;
+    const age = t - this.burstTime; if (this.burst.visible) { this.burst.visible = age < 2 && !this.reduced; this.burst.scale.setScalar(age * 0.11); (this.burst.material as THREE.PointsMaterial).opacity = Math.max(0, 1 - age / 2); }
+    this.sunlight.intensity = 3.2 + Math.sin(t * 0.08) * 0.1;
+    this.updateCamera(delta);
+    this.renderer.render(this.scene, this.camera); this.onFrame?.();
+    if (this.firstFrame) { this.firstFrame = false; this.resolveReady(); }
+  }
+}
