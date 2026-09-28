@@ -498,3 +498,103 @@ export class LakeWorld {
     if (id === 'watch') {
       if (this.mode !== 'sneaking') { this.onNotice?.('Press C or the sneak button, then approach quietly.'); return; }
       if (this.park.startled) { this.onNotice?.('The birds are settling. Stay quiet for a few seconds, then try again.'); return; }
+      this.mode = 'watching';
+    }
+    if (['nursery', 'sapling', 'watch'].includes(id)) this.beginWork(id, () => {
+      this.activityCompleted.add(id); if (id === 'watch') this.mode = 'sneaking';
+      this.onNotice?.({ nursery: 'Seedlings watered. New blossoms open in the nursery.', sapling: 'A shade tree planted. This quick growth represents time passing.', watch: 'Observation recorded: three birds feeding beside the reeds. Quiet visits leave room for wildlife.' }[id as 'nursery' | 'sapling' | 'watch']);
+    });
+  }
+  apply(completed: ActionId[], id?: ActionId) {
+    this.renderer.shadowMap.needsUpdate = true;
+    this.completed = [...completed]; this.litter.visible = !completed.includes('cleanup'); this.inletLitter.visible = !completed.includes('drain');
+    this.waterTarget.set(completed.length ? [0x759a8e, 0x639d94, 0x4e9c93, 0x39998f][completed.length] : 0x759a8e);
+    if (id && !this.reduced) { this.burst.position.copy(locations[id]); this.burstTime = this.time; this.burst.visible = true; }
+    if (this.reduced) { this.waterMaterial.color.copy(this.waterTarget); this.reeds.scale.y = completed.includes('reeds') ? 1 : 0.03; }
+  }
+  reset() {
+    this.apply([]); this.player.set(-5, 0.3, 14); this.route = []; this.navigating = null; this.working = null; this.actionComplete = undefined;
+    this.nearby = null; this.nearbyActivity = null; this.nearbyNpc = null; this.mode = 'walking'; this.activityCompleted.clear(); this.keys.clear(); this.park.reset(); this.gameTime = 0;
+    this.cameraYaw = 0.35; this.cameraPitch = 0.3; this.cameraDistance = 5.8; this.heading = Math.PI; this.cameraReady = false; this.orbit = 0; this.zoom = 1; this.burst.visible = false; this.burstTime = -10; this.resize();
+  }
+  private movePlayer(delta: number) {
+    const horizontal = Number(this.keys.has('d') || this.keys.has('arrowright')) - Number(this.keys.has('a') || this.keys.has('arrowleft'));
+    const forward = Number(this.keys.has('w') || this.keys.has('arrowup')) - Number(this.keys.has('s') || this.keys.has('arrowdown'));
+    if (this.keys.has('q')) this.cameraYaw += delta * 1.5;
+    if (this.keys.has('r')) this.cameraYaw -= delta * 1.5;
+    if (this.mode === 'sitting' && (horizontal || forward)) this.standUp();
+    const direction = new THREE.Vector3();
+    if (horizontal || forward) {
+      this.route = []; this.navigating = null;
+      if (this.mode === 'boating') {
+        this.boatHeading -= horizontal * delta * 1.25;
+        direction.set(Math.sin(this.boatHeading) * forward, 0, Math.cos(this.boatHeading) * forward);
+      } else { const movement = cameraRelativeMovement(horizontal, forward, this.cameraYaw); direction.set(movement.x, 0, movement.z); }
+    } else if (this.route.length) {
+      direction.copy(this.route[0]).sub(this.player); direction.y = 0;
+      const arrivalDistance = this.route.length === 1 && ['walking', 'sneaking'].includes(this.mode) ? 1 : 0.22;
+      if (direction.length() < arrivalDistance) { this.route.shift(); if (!this.route.length) this.navigating = null; direction.set(0, 0, 0); }
+      else { direction.normalize(); if (this.mode === 'boating') this.boatHeading = Math.atan2(direction.x, direction.z); }
+    }
+    if (this.working) {
+      direction.set(0, 0, 0);
+      const duration = this.working === 'watch' ? 2.4 : this.working === 'sapling' || this.working === 'nursery' ? 2 : 1.4;
+      this.workProgress = Math.min(1, this.workProgress + delta / duration);
+      if (this.workProgress >= 1) { const callback = this.actionComplete; this.working = null; this.actionComplete = undefined; callback?.(); }
+    }
+    if (this.mode === 'sitting') direction.set(0, 0, 0);
+    const speed = this.mode === 'boating' ? 3.8 : this.mode === 'swimming' ? 2.2 : this.mode === 'sneaking' ? 1.2 : this.keys.has('shift') ? 5.6 : 3.7;
+    const before = this.player.clone();
+    if (direction.lengthSq() > 0) {
+      const bound = this.mode === 'boating' ? constrainToWater : constrainToPark;
+      const candidate = bound(this.player.x + direction.x * speed * delta, this.player.z + direction.z * speed * delta);
+      if (this.mode !== 'boating' && this.mode !== 'swimming') {
+        for (const obstacle of this.colliders) {
+          const dx = candidate.x - obstacle.x, dz = candidate.z - obstacle.z, distance = Math.hypot(dx, dz);
+          if (distance < obstacle.radius) { candidate.x = obstacle.x + (dx / (distance || 1)) * obstacle.radius; candidate.z = obstacle.z + (dz / (distance || 1)) * obstacle.radius; }
+        }
+      }
+      const safe = bound(candidate.x, candidate.z); this.player.x = safe.x; this.player.z = safe.z;
+      const target = Math.atan2(direction.x, direction.z); this.heading += Math.atan2(Math.sin(target - this.heading), Math.cos(target - this.heading)) * Math.min(1, delta * 12);
+      if (this.route.length && !this.drag) { const desired = this.heading + Math.PI; this.cameraYaw += Math.atan2(Math.sin(desired - this.cameraYaw), Math.cos(desired - this.cameraYaw)) * (1 - Math.exp(-delta * 1.5)); }
+    }
+    if (['walking', 'sneaking'].includes(this.mode) && isWater(this.player.x, this.player.z, 0.25)) { this.mode = 'swimming'; this.activityCompleted.add('swim'); this.onNotice?.('Swimming. Press E for an assisted swim back to shore.'); }
+    if (this.mode === 'swimming' && !isWater(this.player.x, this.player.z, 0.05)) { this.mode = 'walking'; this.onNotice?.('Back on dry land.'); }
+    const moved = Math.hypot(before.x - this.player.x, before.z - this.player.z); this.walkCycle += moved * 6;
+    const walking = moved > 0.0001; this.boatMoving = this.mode === 'boating' && walking;
+    const elliptical = Math.hypot(this.player.x, this.player.z / 0.66);
+    this.player.y = this.mode === 'swimming' ? -0.16 : this.mode === 'boating' ? -0.2 : this.mode === 'sitting' ? -0.24 : elliptical < 27.3 ? 0.3 : 0.015;
+    this.avatar.position.copy(this.player); this.avatar.rotation.set(this.mode === 'swimming' ? 1.22 : 0, this.mode === 'boating' ? this.boatHeading : this.heading, 0, 'YXZ');
+    this.playerShadow.position.set(this.player.x, elliptical < 27.3 ? 0.31 : 0.02, this.player.z); this.playerShadow.visible = !['swimming', 'boating'].includes(this.mode);
+    if (this.mode === 'boating') { this.park.boat.position.x = this.player.x; this.park.boat.position.z = this.player.z; this.park.boat.rotation.y = this.boatHeading; }
+    const canvas = this.renderer.domElement; canvas.dataset.playerPosition = `${this.player.x.toFixed(3)},${this.player.z.toFixed(3)}`; canvas.dataset.mode = this.mode; canvas.dataset.dockable = String(canLeaveBoat(this.player));
+    const gait = walking && !this.reduced ? Math.sin(this.walkCycle) * 0.6 : 0;
+    this.limbs.forEach((limb, i) => { limb.rotation.set(gait * (i % 2 ? -1 : 1), 0, 0); });
+    this.knees.forEach((knee, i) => { knee.rotation.x = walking && !this.reduced ? Math.max(0, Math.sin(this.walkCycle + i * Math.PI)) * 0.5 : 0; });
+    this.torso.rotation.x = this.working ? 0.4 : 0; this.torso.position.y = 0.73;
+    if (this.mode === 'sneaking') { this.torso.position.y = 0.57; this.torso.rotation.x = 0.18; this.knees.forEach(knee => { knee.rotation.x += 0.5; }); this.limbs[0].rotation.x -= 0.25; this.limbs[1].rotation.x -= 0.25; }
+    if (this.mode === 'sitting' || this.mode === 'boating') { this.torso.rotation.x = 0; this.limbs[0].rotation.x = -Math.PI / 2; this.limbs[1].rotation.x = -Math.PI / 2; this.knees.forEach(knee => { knee.rotation.x = Math.PI / 2; }); this.limbs[2].rotation.x = -0.6; this.limbs[3].rotation.x = -0.6; }
+    if (this.mode === 'swimming') { this.limbs[2].rotation.x = this.reduced ? -1 : Math.sin(this.gameTime * 3) * 1.7; this.limbs[3].rotation.x = this.reduced ? -1 : Math.sin(this.gameTime * 3 + Math.PI) * 1.7; }
+    if (this.working) { this.torso.position.y = 0.54; this.limbs[2].rotation.x = -0.7; this.limbs[3].rotation.x = -0.9 + (this.reduced ? 0 : Math.sin(this.workProgress * 20) * 0.4); }
+    if (this.mode === 'watching') { this.torso.rotation.x = 0; this.torso.position.y = 0.73; this.limbs[2].rotation.x = -2.5; this.limbs[3].rotation.x = -2.5; }
+    this.tool.visible = this.working === 'reeds' || this.working === 'sapling'; this.park.wateringCan.visible = this.working === 'nursery'; this.park.binoculars.visible = this.mode === 'watching';
+    this.nearby = null; this.nearbyActivity = null; this.nearbyNpc = null;
+    if (['walking', 'sneaking', 'watching'].includes(this.mode)) {
+      let nearest = 2.6;
+      for (const id of Object.keys(locations) as ActionId[]) { const distance = this.distanceTo(id); if (!this.completed.includes(id) && distance < Math.min(2.1, nearest)) { nearest = distance; this.nearby = id; } }
+      for (const activity of activities) { const distance = Math.hypot(this.player.x - activity.point.x, this.player.z - activity.point.z); if ((!activity.once || !this.activityCompleted.has(activity.id)) && distance < nearest) { nearest = distance; this.nearby = null; this.nearbyActivity = activity.id; } }
+      for (const npc of npcs) { const p = this.park.npcPosition(npc.id); const distance = Math.hypot(this.player.x - p.x, this.player.z - p.z); if (distance < nearest) { nearest = distance; this.nearby = null; this.nearbyActivity = null; this.nearbyNpc = npc.id; } }
+    }
+  }
+  private updateCamera(delta: number) {
+    this.landscape.visible = this.playing;
+    if (!this.playing) { this.overviewCamera.position.set(Math.sin(0.4 + this.orbit) * 32 * MAP_SCALE, 25 * MAP_SCALE, Math.cos(0.4 + this.orbit) * 32 * MAP_SCALE); this.overviewCamera.lookAt(0, 0.2, 0); return; }
+    if (!this.scene.background) { this.scene.background = new THREE.Color(0xe7d8b7); this.scene.fog = new THREE.Fog(0xe7d8b7, 42, 120); }
+    const aimHeight = this.mode === 'swimming' ? 0.6 : this.mode === 'sneaking' ? 0.95 : 1.15;
+    const aim = this.player.clone().add(new THREE.Vector3(0, aimHeight, 0));
+    const distance = this.cameraDistance;
+    const desired = new THREE.Vector3(this.player.x + Math.sin(this.cameraYaw) * distance, Math.max(0.6, aim.y + Math.sin(this.cameraPitch) * distance), this.player.z + Math.cos(this.cameraYaw) * distance);
+    let obstruction = cameraBoomFraction(aim, desired, this.cameraObstacles);
+    if (aim.distanceTo(desired) * obstruction < 2.8) {
+      let bestScore = aim.distanceTo(desired) * obstruction, bestYaw = this.cameraYaw;
+      for (const offset of [0.35, -0.35, 0.7, -0.7, 1.1, -1.1, 1.5, -1.5]) {
