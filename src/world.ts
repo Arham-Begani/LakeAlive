@@ -398,3 +398,103 @@ export class LakeWorld {
       const delta = e.clientX - this.drag.x;
       const dy = e.clientY - this.drag.y;
       if (Math.abs(delta) + Math.abs(dy) > 3 || this.drag.moved) {
+        this.drag.moved = true; this.orbit -= delta * 0.005;
+        this.cameraYaw -= delta * 0.005;
+        this.cameraPitch = THREE.MathUtils.clamp(this.cameraPitch + dy * 0.003, 0.12, 0.75);
+        this.drag.x = e.clientX; this.drag.y = e.clientY;
+      }
+    });
+    canvas.addEventListener('pointerup', e => {
+      if (this.drag && !this.drag.moved && this.playing && !this.paused) {
+        const rect = canvas.getBoundingClientRect(); this.raycaster.setFromCamera(new THREE.Vector2((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1), this.camera);
+        const point = this.raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.3), new THREE.Vector3());
+        if (point && Math.hypot(point.x, point.z) < PARK_RADIUS) {
+          if (this.mode === 'boating') {
+            const destination = constrainToWater(point.x, point.z);
+            this.route = [new THREE.Vector3(destination.x, 0, destination.z)]; this.navigating = null;
+          } else this.navigate(point);
+        }
+      }
+      this.drag = null;
+    });
+    canvas.addEventListener('pointercancel', () => { this.drag = null; });
+    canvas.addEventListener('wheel', e => { e.preventDefault(); this.zoom = THREE.MathUtils.clamp(this.zoom - e.deltaY * 0.0005, 0.8, 1.3); this.cameraDistance = THREE.MathUtils.clamp(this.cameraDistance + e.deltaY * 0.003, 2.5, 7); this.resize(); }, { passive: false });
+  }
+  resize() {
+    const { width, height } = this.container.getBoundingClientRect(); if (!width || !height) return;
+    this.renderer.setSize(width, height); const aspect = width / height;
+    const span = (aspect < 1 ? 15 / aspect : 16) * MAP_SCALE / this.zoom;
+    this.overviewCamera.left = -span * aspect; this.overviewCamera.right = span * aspect; this.overviewCamera.top = span; this.overviewCamera.bottom = -span; this.overviewCamera.near = 0.1; this.overviewCamera.far = 150; this.overviewCamera.updateProjectionMatrix();
+    this.followCamera.aspect = aspect; this.followCamera.fov = aspect < 0.8 ? 70 : 58; this.followCamera.updateProjectionMatrix();
+  }
+  project(position: THREE.Vector3) {
+    const p = position.clone().add(new THREE.Vector3(0, 0.8, 0)).project(this.camera);
+    return { x: this.container.offsetLeft + (p.x + 1) / 2 * this.container.clientWidth, y: this.container.offsetTop + (-p.y + 1) / 2 * this.container.clientHeight, visible: p.z > -1 && p.z < 1 && Math.abs(p.x) < 0.94 && Math.abs(p.y) < 0.88 };
+  }
+  get playerPosition() { return { x: this.player.x, z: this.player.z }; }
+  get cameraHeading() { return this.cameraYaw; }
+  distanceTo(id: ActionId) { const p = locations[id]; return Math.hypot(this.player.x - p.x, this.player.z - p.z); }
+  visit(id: ActionId) { if (this.mode === 'boating') { this.onNotice?.('Moor the boat before starting a land activity.'); return; } this.navigate(locations[id]); this.navigating = id; }
+  visitActivity(id: ActivityId) {
+    if (this.mode === 'boating') { this.returnToShore(); return; }
+    const p = activityById(id).point; this.navigate(new THREE.Vector3(p.x, 0.3, p.z)); this.navigating = id;
+  }
+  visitNpc(id: NpcId) { const p = this.park.npcPosition(id); if (this.mode === 'boating') { this.onNotice?.('Return the boat to the jetty first.'); return; } this.navigate(p); this.navigating = id; }
+  private navigate(point: THREE.Vector3) {
+    if (this.working) return;
+    if (this.mode === 'sitting') this.standUp();
+    const destination = constrainToShore(point.x, point.z);
+    const start = Math.atan2(this.player.z / 0.66, this.player.x);
+    const end = Math.atan2(destination.z / 0.66, destination.x);
+    const difference = Math.atan2(Math.sin(end - start), Math.cos(end - start));
+    this.route = [];
+    const segments = Math.ceil(Math.abs(difference) / 0.16);
+    if (segments > 1) {
+      const pathRadius = 9.8 * MAP_SCALE;
+      this.route.push(new THREE.Vector3(Math.cos(start) * pathRadius, 0.3, Math.sin(start) * pathRadius * 0.66));
+      for (let i = 1; i <= segments; i++) { const angle = start + difference * i / segments; this.route.push(new THREE.Vector3(Math.cos(angle) * pathRadius, 0.3, Math.sin(angle) * pathRadius * 0.66)); }
+    }
+    this.route.push(new THREE.Vector3(destination.x, 0.3, destination.z)); this.navigating = null;
+  }
+  startAction(id: ActionId, onComplete: () => void) {
+    if (this.working || this.completed.includes(id) || this.distanceTo(id) > 2.1 || ['boating', 'swimming', 'sitting'].includes(this.mode)) return false;
+    this.beginWork(id, onComplete); return true;
+  }
+  private beginWork(id: ActionId | ActivityId, onComplete: () => void) {
+    this.working = id; this.workProgress = 0; this.actionComplete = onComplete; this.route = []; this.navigating = null;
+    const p = id in locations ? locations[id as ActionId] : activityById(id as ActivityId).point;
+    this.heading = Math.atan2(p.x - this.player.x, p.z - this.player.z); this.keys.clear();
+  }
+  toggleSneak() {
+    if (this.working || !['walking', 'sneaking'].includes(this.mode)) return;
+    this.mode = this.mode === 'sneaking' ? 'walking' : 'sneaking'; this.route = []; this.navigating = null;
+  }
+  standUp() {
+    if (this.mode !== 'sitting') return;
+    this.mode = 'walking'; this.player.set(-24.9, 0.3, 9); this.route = []; this.navigating = null;
+  }
+  returnToShore() {
+    if (this.working) return;
+    if (this.mode === 'sitting') { this.standUp(); return; }
+    if (this.mode === 'boating') {
+      if (canLeaveBoat(this.player)) {
+        this.mode = 'walking'; this.player.set(boatExit.x, 0.3, boatExit.z); this.park.boat.position.set(boatMooring.x, 0.18, boatMooring.z); this.park.boat.rotation.y = Math.PI; this.route = []; this.navigating = null; this.onNotice?.('Boat moored. Back on the lakeside.');
+      } else { this.route = [new THREE.Vector3(boatMooring.x, 0, boatMooring.z)]; this.navigating = 'boat'; this.onNotice?.('Rowing back to the jetty. Press E again when you arrive to step ashore.'); }
+      return;
+    }
+    if (this.mode === 'swimming') {
+      const p = constrainToShore(this.player.x, this.player.z); this.route = [new THREE.Vector3(p.x, 0.3, p.z)]; this.navigating = 'shore';
+    }
+  }
+  interactActivity(id: ActivityId) {
+    if (this.working || !['walking', 'sneaking'].includes(this.mode)) return;
+    const activity = activityById(id);
+    if (Math.hypot(this.player.x - activity.point.x, this.player.z - activity.point.z) > 2.6) { this.visitActivity(id); return; }
+    if (activity.once && this.activityCompleted.has(id)) { this.onNotice?.('You have already cared for this spot.'); return; }
+    this.route = []; this.navigating = null;
+    if (id === 'bench') { this.mode = 'sitting'; this.player.set(-26, -0.24, 9); this.heading = Math.PI / 2; this.activityCompleted.add(id); this.onNotice?.('Take a breath. Press E or move to stand up.'); }
+    if (id === 'boat') { this.mode = 'boating'; this.player.set(boatMooring.x, -0.2, boatMooring.z); this.boatHeading = Math.PI; this.heading = Math.PI; this.activityCompleted.add(id); this.onNotice?.('Life jacket on. W/S row, A/D steer. Press E to return to the jetty.'); }
+    if (id === 'swim') { this.mode = 'swimming'; this.player.set(activity.point.x * 0.83, -0.15, activity.point.z * 0.83); this.activityCompleted.add(id); this.onNotice?.('WASD to swim. E guides you back to shore. This fictional swimming area is not real-world safety advice.'); }
+    if (id === 'watch') {
+      if (this.mode !== 'sneaking') { this.onNotice?.('Press C or the sneak button, then approach quietly.'); return; }
+      if (this.park.startled) { this.onNotice?.('The birds are settling. Stay quiet for a few seconds, then try again.'); return; }
