@@ -198,3 +198,103 @@ export class LakeWorld {
     // A few exposed, faceted stones in the island's cutaway edge.
     for (let i = 0; i < 55; i++) {
       const a = this.random() * Math.PI * 2; const rock = this.mesh(new THREE.DodecahedronGeometry(0.12 + this.random() * 0.23, 0), 0x9e9479);
+      rock.position.set(Math.cos(a) * 12.05, -0.6 - this.random() * 0.6, Math.sin(a) * 7.95); rock.scale.set(1.5, 0.7, 1);
+    }
+  }
+  private makeTree(x: number, z: number, size: number, type: number) {
+    this.colliders.push({ x, z, radius: 0.26 * size + 0.2 });
+    const tree = new THREE.Group(); tree.position.set(x, 0.25, z); tree.scale.setScalar(size); this.scene.add(tree); this.trees.push({ group: tree, size });
+    const trunk = this.mesh(new THREE.CylinderGeometry(0.085, 0.15, 1.5, 5), palette.trunk, tree); trunk.position.y = 0.75;
+    if (type > 0.8) {
+      for (let i = 0; i < 3; i++) { const top = this.mesh(new THREE.ConeGeometry(0.8 - i * 0.14, 1.6, 6), i % 2 ? 0x567459 : 0x688469, tree); top.position.y = 1.4 + i * 0.55; }
+    } else {
+      for (let j = 0; j < 4; j++) {
+        const top = this.mesh(new THREE.IcosahedronGeometry(0.7 + this.random() * 0.25, 0), [0x668353, 0x82965d, 0x526f49, 0x9ba86d][j], tree);
+        top.position.set((this.random() - 0.5) * 0.75, 1.7 + this.random() * 0.85, (this.random() - 0.5) * 0.65); top.scale.y = 0.85;
+      }
+    }
+  }
+  private makeNature() {
+    for (let i = 0; i < 40; i++) {
+      const a = i / 40 * Math.PI * 2; const r = 10.8 + this.random();
+      if (a > 0.25 && a < 2.6 && i % 3) continue;
+      this.makeTree(Math.cos(a) * r, Math.sin(a) * r * 0.66, 0.7 + this.random() * 0.65, this.random());
+    }
+    for (let i = 0; i < 95; i++) {
+      const a = this.random() * Math.PI * 2, r = 8.65 + this.random() * 0.5;
+      const rock = this.mesh(new THREE.IcosahedronGeometry(0.10 + this.random() * 0.22, 0), i % 3 ? 0xb3ac8e : 0x929d75);
+      rock.position.set(Math.cos(a) * r, 0.27, Math.sin(a) * r * 0.66); rock.scale.set(1.5, 0.65, 1);
+    }
+    for (let i = 0; i < 160; i++) {
+      const a = this.random() * Math.PI * 2, r = 8.2 + this.random() * 0.55;
+      const group = new THREE.Group(); group.position.set(Math.cos(a) * r, 0.18, Math.sin(a) * r * 0.66);
+      const newReed = i > 55; if (newReed) this.reeds.add(group); else this.scene.add(group);
+      for (let j = 0; j < 3; j++) {
+        const h = 0.35 + this.random() * 0.65;
+        const blade = this.mesh(new THREE.ConeGeometry(0.035, h, 3), j % 2 ? 0x75864d : 0x567453, group);
+        blade.position.set(j * 0.075, h / 2, j * 0.02); blade.rotation.z = (this.random() - 0.5) * 0.3;
+        if (j === 0) { const head = this.mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.17, 4), 0x91714b, group); head.position.y = h; }
+      }
+    }
+    this.reeds.scale.y = 0.03;
+    for (let i = 0; i < 14; i++) {
+      const a = 1.65 + this.random() * 1.1;
+      const rubbish = this.mesh(new THREE.BoxGeometry(0.18, 0.08, 0.26), i % 2 ? 0xe7ddc0 : 0xb29170, this.litter);
+      rubbish.position.set(Math.cos(a) * 8.7, 0.28, Math.sin(a) * 5.8); rubbish.rotation.y = this.random() * 5;
+    }
+    for (let i = 0; i < 8; i++) {
+      const fish = new THREE.Group();
+      const body = this.mesh(new THREE.SphereGeometry(0.11, 6, 4), 0xe7b36c, fish); body.scale.set(2, 0.5, 0.8);
+      const tail = this.mesh(new THREE.ConeGeometry(0.11, 0.17, 3), 0xd99955, fish); tail.rotation.z = -Math.PI / 2; tail.position.x = -0.24;
+      this.scene.add(fish); this.fish.push(fish);
+    }
+    for (let i = 0; i < 5; i++) {
+      const bird = new THREE.Group(); const body = this.mesh(new THREE.SphereGeometry(0.12, 6, 4), 0xfff2d4, bird); body.scale.set(1.6, 0.6, 0.7);
+      for (const side of [-1, 1]) { const wing = this.mesh(new THREE.ConeGeometry(0.17, 0.55, 3), 0xefe7ce, bird); wing.rotation.x = side * Math.PI / 2; wing.position.z = side * 0.22; }
+      const beak = this.mesh(new THREE.ConeGeometry(0.035, 0.17, 3), 0xc69b55, bird); beak.rotation.z = -Math.PI / 2; beak.position.x = 0.25;
+      this.scene.add(bird); this.birds.push(bird);
+    }
+    for (let i = 0; i < 38; i++) {
+      const ripple = new THREE.Mesh(new THREE.PlaneGeometry(0.3 + this.random() * 0.65, 0.025), new THREE.MeshBasicMaterial({ color: 0xf4e8be, transparent: true, opacity: 0.22, depthWrite: false }));
+      ripple.rotation.x = -Math.PI / 2; const a = this.random() * Math.PI * 2, r = Math.sqrt(this.random());
+      ripple.position.set(Math.cos(a) * r * 7.8, 0.13, Math.sin(a) * r * 4.9); this.scene.add(ripple); this.ripples.push(ripple);
+    }
+    // Lily pads are native-habitat symbols, not a species-identification model.
+    for (let i = 0; i < 16; i++) {
+      const pad = this.mesh(new THREE.CircleGeometry(0.14 + this.random() * 0.16, 9, 0.2, Math.PI * 1.85), 0x849759); pad.rotation.x = -Math.PI / 2;
+      pad.position.set(4.8 + this.random() * 1.4, 0.14, -1 + this.random() * 2);
+      if (i % 4 === 0) { const flower = this.mesh(new THREE.IcosahedronGeometry(0.09, 0), 0xe9c5ad); flower.position.copy(pad.position); flower.position.y += 0.06; }
+    }
+    for (const x of [-4, 4]) { const bench = new THREE.Group(); bench.position.set(x, 0.35, -6.6); this.scene.add(bench);
+      for (let i = 0; i < 3; i++) { const slat = this.mesh(new THREE.BoxGeometry(1.2, 0.07, 0.12), 0x9f7951, bench); slat.position.set(0, 0.36, i * 0.14); }
+      for (const s of [-1, 1]) { const leg = this.mesh(new THREE.BoxGeometry(0.07, 0.38, 0.42), 0x5c6452, bench); leg.position.set(s * 0.45, 0.18, 0.15); }
+    }
+  }
+  private makeDock() {
+    const dock = new THREE.Group(); dock.position.set(1.8, 0.38, 5.9); dock.rotation.y = -0.12; this.scene.add(dock);
+    for (let i = 0; i < 13; i++) { const plank = this.mesh(new THREE.BoxGeometry(1.65, 0.1, 0.22), i % 2 ? 0xb59263 : 0xc4a477, dock); plank.position.z = -i * 0.24; }
+    for (const x of [-0.7, 0.7]) for (const z of [0, -2.8]) {
+      const post = this.mesh(new THREE.CylinderGeometry(0.075, 0.08, 0.9, 6), 0x8b6e49, dock); post.position.set(x, 0, z);
+      const cap = this.mesh(new THREE.SphereGeometry(0.095, 6, 4), 0xdbc49a, dock); cap.position.set(x, 0.46, z);
+    }
+    const sign = new THREE.Group(); sign.position.set(-1, 0.3, 6.7); sign.rotation.y = 0.3; this.scene.add(sign);
+    const post = this.mesh(new THREE.BoxGeometry(0.09, 0.8, 0.09), 0x755f45, sign); post.position.y = 0.4;
+    const board = this.mesh(new THREE.BoxGeometry(0.65, 0.38, 0.1), 0x4a6756, sign); board.position.y = 0.8;
+  }
+  private makeInlet() {
+    const inlet = this.mesh(new THREE.BoxGeometry(1.2, 0.18, 1.8), 0x9a9e88); inlet.position.set(-6.4, 0.28, -4.9); inlet.rotation.y = -0.7;
+    for (let i = 0; i < 7; i++) { const grate = this.mesh(new THREE.BoxGeometry(0.055, 0.08, 1), 0x667365); grate.position.set(-6.85 + i * 0.15, 0.41, -4.9); }
+    for (let i = 0; i < 9; i++) { const trash = this.mesh(new THREE.BoxGeometry(0.16, 0.06, 0.19), i % 2 ? 0xd4b98a : 0xc7d1c2, this.inletLitter); trash.position.set(-6.5 + this.random(), 0.45, -4.7 + this.random()); }
+  }
+  private makeAvatar() {
+    this.avatar.add(this.torso); this.torso.name = 'torso'; this.torso.position.y = 0.73;
+    const body = this.mesh(new THREE.CylinderGeometry(0.22, 0.25, 0.53, 8), 0xe3a24c, this.torso); body.position.y = 0.27; body.scale.z = 0.7;
+    const collar = this.mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.09, 8), 0xf1c47e, this.torso); collar.position.y = 0.55;
+    const head = this.mesh(new THREE.SphereGeometry(0.23, 10, 8), 0xb98057, this.torso); head.position.set(0, 0.8, 0.015); head.scale.set(0.88, 1.12, 0.88);
+    const hair = this.mesh(new THREE.SphereGeometry(0.235, 10, 8), 0x3f3027, this.torso); hair.position.set(0, 0.9, -0.025); hair.scale.set(0.92, 0.7, 0.87);
+    const nose = this.mesh(new THREE.BoxGeometry(0.065, 0.07, 0.09), 0xae724d, this.torso); nose.position.set(0, 0.79, 0.21);
+    for (const x of [-0.075, 0.075]) { const eye = this.mesh(new THREE.SphereGeometry(0.022, 6, 4), 0x322c26, this.torso); eye.position.set(x, 0.84, 0.19); }
+    const brim = this.mesh(new THREE.CylinderGeometry(0.37, 0.37, 0.045, 12), 0xe9cf92, this.torso); brim.position.y = 1;
+    const crown = this.mesh(new THREE.CylinderGeometry(0.22, 0.25, 0.17, 10), 0xd8b879, this.torso); crown.position.y = 1.1;
+    const band = this.mesh(new THREE.CylinderGeometry(0.251, 0.254, 0.055, 10), 0x6e7449, this.torso); band.position.y = 1.04;
+    const pack = this.mesh(new THREE.BoxGeometry(0.33, 0.4, 0.2), 0x476859, this.torso); pack.position.set(0, 0.28, -0.24);
